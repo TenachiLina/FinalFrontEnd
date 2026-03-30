@@ -126,13 +126,15 @@ const Calendar: React.FC = () => {
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-          initialView="dayGridMonth"
+          //initialView="dayGridMonth" -> initialView="timeGridDay"
+          initialView="timeGridDay"
           headerToolbar={{
             left: "prev,next addEventButton",
             center: "title",
-            right: "dayGridMonth,timeGridWeek,timeGridDay",
+            //right: "dayGridMonth,timeGridWeek,timeGridDay" -> right: "timeGridDay"
+            right: "timeGridDay",
           }}
-          events={events}
+          // events={events}
           selectable={true}
           select={handleDateSelect}
           eventClick={handleEventClick}
@@ -143,6 +145,8 @@ const Calendar: React.FC = () => {
               click: openModal,
             },
           }}
+          slotMinTime="06:00:00"  // start at 6 AM
+          slotMaxTime="17:00:00"  // end at 6 PM
         />
       </div>
       <Modal

@@ -34,8 +34,11 @@ const navItems: NavItem[] = [
   },
   {
     icon: <CalenderIcon />,
-    name: "Calendar",
-    path: "/calendar",
+    name: "Planning",
+    subItems: [
+    { name: "New Planning", path: "/calendar/DoPlanning", pro: false },
+    { name: "View Planning", path: "/calendar/ViewPlanning", pro: false },
+    ]
   },
   {
     icon: <UserCircleIcon />,
@@ -49,7 +52,7 @@ const navItems: NavItem[] = [
     subItems: [{ name: "Form Elements", path: "/form-elements", pro: false }],
   },
   {
-    name: "Tables",
+    name: "Employees Management",
     icon: <TableIcon />,
     subItems: [{ name: "Basic Tables", path: "/basic-tables", pro: false }],
   },
@@ -304,31 +307,37 @@ const AppSidebar: React.FC = () => {
       onMouseLeave={() => setIsHovered(false)}
     >
       <div
-        className={`py-8 flex  ${
+      className={`py-8 flex ${
           !isExpanded && !isHovered ? "lg:justify-center" : "justify-start"
         }`}
       >
         <Link href="/">
           {isExpanded || isHovered || isMobileOpen ? (
-            <>
+            <div className="flex items-center gap-4">
+              {/* Light mode */}
               <Image
-                className="dark:hidden"
-                src="/images/logo/logo.svg"
+                className="dark:hidden rounded-lg"
+                src="/images/logo/King.png"
                 alt="Logo"
-                width={150}
+                width={40}
                 height={40}
               />
+              {/* Dark mode */}
               <Image
-                className="hidden dark:block"
-                src="/images/logo/logo-dark.svg"
+                className="hidden dark:block rounded-lg"
+                src="/images/logo/King.png"
                 alt="Logo"
-                width={150}
+                width={40}
                 height={40}
               />
-            </>
+              <span className="text-xl font-bold text-gray-800 dark:text-white">
+                Nexo InOuty
+              </span>
+            </div>
           ) : (
             <Image
-              src="/images/logo/logo-icon.svg"
+              className="rounded-lg"
+              src="/images/logo/King.png"
               alt="Logo"
               width={32}
               height={32}
