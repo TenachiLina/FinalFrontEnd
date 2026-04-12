@@ -5,8 +5,20 @@ export interface Employee {
     name: string;
     PhoneNumber: string;
   };
+ 
+  // Legacy fields (kept for backward compatibility)
+  salary?: string;
+  Address?: string;
+ 
+  // New fields
+  emp_number: number;
+  FirstName: string;
+  LastName: string;
   position: string;
-  salary: string;
-  Address: string;
-  status: "Vacation" | "In Progress";
+  Base_salary: number;
+  address: string;
+  phone_number: string;
+ 
+  status: "Vacation" | "In Progress" | "Terminated";
 }
+ 

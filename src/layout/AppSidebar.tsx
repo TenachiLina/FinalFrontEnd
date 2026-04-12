@@ -54,7 +54,10 @@ const navItems: NavItem[] = [
   {
     name: "Employees Management",
     icon: <TableIcon />,
-    subItems: [{ name: "Basic Tables", path: "/basic-tables", pro: false }],
+    subItems: [
+      { name: "Basic Tables", path: "/basic-tables", pro: false },
+      { name: "Clock In / Out", path: "/clockinpage", pro: false },
+    ],
   },
   {
     name: "Pages",
@@ -236,11 +239,9 @@ const AppSidebar: React.FC = () => {
   );
   const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // const isActive = (path: string) => path === pathname;
-   const isActive = useCallback((path: string) => path === pathname, [pathname]);
+  const isActive = useCallback((path: string) => path === pathname, [pathname]);
 
   useEffect(() => {
-    // Check if the current path matches any submenu item
     let submenuMatched = false;
     ["main", "others"].forEach((menuType) => {
       const items = menuType === "main" ? navItems : othersItems;
@@ -259,14 +260,12 @@ const AppSidebar: React.FC = () => {
       });
     });
 
-    // If no submenu item matches, close the open submenu
     if (!submenuMatched) {
       setOpenSubmenu(null);
     }
   }, [pathname,isActive]);
 
   useEffect(() => {
-    // Set the height of the submenu items when the submenu is opened
     if (openSubmenu !== null) {
       const key = `${openSubmenu.type}-${openSubmenu.index}`;
       if (subMenuRefs.current[key]) {
@@ -314,7 +313,6 @@ const AppSidebar: React.FC = () => {
         <Link href="/">
           {isExpanded || isHovered || isMobileOpen ? (
             <div className="flex items-center gap-4">
-              {/* Light mode */}
               <Image
                 className="dark:hidden rounded-lg"
                 src="/images/logo/King.png"
@@ -322,7 +320,6 @@ const AppSidebar: React.FC = () => {
                 width={40}
                 height={40}
               />
-              {/* Dark mode */}
               <Image
                 className="hidden dark:block rounded-lg"
                 src="/images/logo/King.png"
