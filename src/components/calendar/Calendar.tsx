@@ -34,11 +34,9 @@ interface Cell {
   title: string;
 }
 
-// type GridData = Record<number, Record<string, Cell | null>>;
 type GridData = Record<number, Record<string, Cell[]>>;
 
 // ─── Component ────────────────────────────────────────────────────────────────
-
 const ShiftGrid: React.FC = () =>{
   const { isOpen, openModal, closeModal } = useModal();
   // Grid state: post → shift → event
@@ -50,97 +48,115 @@ const ShiftGrid: React.FC = () =>{
     });
     return initial;
   });
+
   // Currently selected cell
   const [activeCell, setActiveCell] = useState<{ postId: number; shiftId: string } | null>(null);
   // Modal form fields
   const [cellTitle, setCellTitle] = useState("");
-  //Multiple employees per cell:
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
-  //Save:
-  const isEditMode = selectedEmployeeId !== null;
   //State for cell details modal:
   const [isListModalOpen, setIsListModalOpen] = useState(false);
   const [listCell, setListCell] = useState<{
     postId: number;
     shiftId: string;
   } | null>(null);
+
   //CellList :
   const listEmployees = listCell ? grid[listCell.postId][listCell.shiftId] : [];
+  //States for editing modal:
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<Cell | null>(null);
+  const [editTitle, setEditTitle] = useState("");
 
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleCellClick = (postId: number, shiftId: string) => {
   const events = grid[postId][shiftId];
   setActiveCell({ postId, shiftId });
-  setCellTitle(events.length ? events[events.length - 1].title : "");
+  setCellTitle("");
   openModal();
   };
 
   const handleSave = () => {
-    if (!activeCell) return;
-    const { postId, shiftId } = activeCell;
-    if (!cellTitle.trim()) return;
-    setGrid((prev) => {
-      const current = prev[postId][shiftId];
-      // ── EDIT MODE ─────────────────────────────
-      if (selectedEmployeeId) {
-        return {
-          ...prev,
-          [postId]: {
-            ...prev[postId],
-            [shiftId]: current.map((emp) =>
-              emp.id === selectedEmployeeId
-                ? { ...emp, title: cellTitle.trim() }
-                : emp
-            ),
+  if (!activeCell) return;
+  const { postId, shiftId } = activeCell;
+  if (!cellTitle.trim()) return;
+
+  setGrid((prev) => {
+    const current = prev[postId][shiftId];
+    return {
+      ...prev,
+      [postId]: {
+        ...prev[postId],
+        [shiftId]: [
+          ...current,
+          {
+            id: crypto.randomUUID(),
+            title: cellTitle.trim(),
           },
-        };
-      }
-      // ── ADD MODE ──────────────────────────────
-      return {
-        ...prev,
-        [postId]: {
-          ...prev[postId],
-          [shiftId]: [
-            ...current,
-            {
-              id: crypto.randomUUID(),
-              title: cellTitle.trim(),
-            },
-          ],
-        },
-      };
-    });
-
-    closeModal();
-    setActiveCell(null);
-    setSelectedEmployeeId(null);
-    setCellTitle("");
+        ],
+      },
     };
+  });
 
-    const handleDelete = (employeeId: string) => {
-      if (!activeCell) return;
+  closeModal();
+  setActiveCell(null);
+  setCellTitle("");
+  };
 
-      const { postId, shiftId } = activeCell;
+  const handleDelete = (employeeId: string, cell?: { postId: number; shiftId: string }) => {
+  const target = cell ?? activeCell;
+  if (!target) return;
 
-      setGrid((prev) => ({
-        ...prev,
-        [postId]: {
-          ...prev[postId],
-          [shiftId]: prev[postId][shiftId].filter(
-            (emp) => emp.id !== employeeId
-          ),
-        },
-      }));
+  const { postId, shiftId } = target;
 
-      closeModal();
-      setActiveCell(null);
-    };
+  setGrid((prev) => ({
+    ...prev,
+    [postId]: {
+      ...prev[postId],
+      [shiftId]: prev[postId][shiftId].filter((emp) => emp.id !== employeeId),
+    },
+  }));
 
-    const handleClose = () => {
+  closeModal();
+  setActiveCell(null);
+  };
+
+  const handleClose = () => {
       closeModal();
       setActiveCell(null);
       setCellTitle("");
-    };
+  };
+
+  const openEditModal = (emp: Cell, cell: { postId: number; shiftId: string }) => {
+  setActiveCell(cell);
+  setEditingEmployee(emp);
+  setEditTitle(emp.title);
+  setIsListModalOpen(false);
+  setIsEditModalOpen(true);
+  };
+
+  const handleEdit = () => {
+  if (!activeCell || !editingEmployee) return;
+  if (!editTitle.trim()) return;
+
+  const { postId, shiftId } = activeCell;
+
+  setGrid((prev) => ({
+    ...prev,
+    [postId]: {
+      ...prev[postId],
+      [shiftId]: prev[postId][shiftId].map((emp) =>
+        emp.id === editingEmployee.id
+          ? { ...emp, title: editTitle.trim() }
+          : emp
+      ),
+    },
+  }));
+
+  setIsEditModalOpen(false);
+  setEditingEmployee(null);
+  setEditTitle("");
+  setActiveCell(null);
+  };
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -189,8 +205,6 @@ const ShiftGrid: React.FC = () =>{
                 {/* Cells */}
                 {SHIFTS.map((shift) => {
                   const events = grid[post.id][shift.id];
-
-
                   return (
                     <td
                       key={shift.id}
@@ -211,6 +225,12 @@ const ShiftGrid: React.FC = () =>{
                               key={emp.id}
                               className="text-[11px] px-2 py-[2px] text-gray-800 dark:text-white truncate"
                               title={emp.title}
+                              //last change
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setListCell({ postId: post.id, shiftId: shift.id });
+                                setIsListModalOpen(true);
+                              }}
                             >
                               {emp.title}
                             </div>
@@ -276,15 +296,6 @@ const ShiftGrid: React.FC = () =>{
 
           {/* Actions */}
           <div className="flex items-center gap-3 sm:justify-end">
-            {activeEmployeesCell && (
-              <button
-                onClick={() => selectedEmployeeId && handleDelete(selectedEmployeeId)}
-                type="button"
-                className="flex justify-center rounded-lg border border-red-300 bg-white px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:bg-transparent dark:text-red-400 dark:hover:bg-red-900/20"
-              >
-                Delete
-              </button>
-            )}
             <button
               onClick={handleClose}
               type="button"
@@ -297,7 +308,7 @@ const ShiftGrid: React.FC = () =>{
               type="button"
               className="flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 sm:w-auto"
             >
-              {isEditMode ? "Update" : "Save"}
+              "Save"
             </button>
           </div>
         </div>
@@ -321,12 +332,33 @@ const ShiftGrid: React.FC = () =>{
 
           {/* Employee list */}
           <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-1">
+
             {listEmployees.map((emp) => (
               <div
                 key={emp.id}
                 className="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm text-gray-700 dark:text-white flex items-center justify-between"
               >
                 <span className="truncate">{emp.title}</span>
+                <div className="flex items-center gap-2 ml-2 shrink-0">
+                  <button
+                    onClick={() => openEditModal(emp, listCell!)}
+                    type="button"
+                    className="text-blue-400 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 text-xs font-medium"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!listCell) return;
+                      handleDelete(emp.id, listCell);
+                      if (listEmployees.length <= 1) setIsListModalOpen(false);
+                    }}
+                    type="button"
+                    className="text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-400 text-xs font-medium"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
             ))}
 
@@ -345,6 +377,71 @@ const ShiftGrid: React.FC = () =>{
           >
             Hide details
           </button>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditingEmployee(null);
+          setEditTitle("");
+          setActiveCell(null);
+        }}
+        className="max-w-[500px] p-6 lg:p-10"
+      >
+        <div className="flex flex-col gap-6">
+          {/* Header */}
+          <div>
+            <h5 className="mb-1 font-semibold text-gray-800 text-theme-xl dark:text-white/90 lg:text-2xl">
+              Edit Assignment
+            </h5>
+            {activeCell && activePost && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {activePost.label}{":   "}
+                {SHIFTS.find((s) => s.id === activeCell.shiftId)?.label}
+              </p>
+            )}
+          </div>
+
+          {/* Input */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
+              Title
+            </label>
+            <input
+              autoFocus
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleEdit()}
+              placeholder="ex: John Doe"
+              className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-3 sm:justify-end">
+            <button
+              onClick={() => {
+                setIsEditModalOpen(false);
+                setEditingEmployee(null);
+                setEditTitle("");
+                setActiveCell(null);
+              }}
+              type="button"
+              className="flex w-full justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] sm:w-auto"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleEdit}
+              type="button"
+              className="flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 sm:w-auto"
+            >
+              Update
+            </button>
+          </div>
         </div>
       </Modal>
       </div>
