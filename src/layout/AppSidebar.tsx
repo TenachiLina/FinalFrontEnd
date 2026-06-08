@@ -45,6 +45,11 @@ const navItems: NavItem[] = [
     name: "User Profile",
     path: "/profile",
   },
+{
+    icon: <UserCircleIcon />,
+    name: "Clock In / Out",
+    path: "/clockinpage",
+  },
 
   {
     name: "Forms",
@@ -56,7 +61,6 @@ const navItems: NavItem[] = [
     icon: <TableIcon />,
     subItems: [
       { name: "Basic Tables", path: "/basic-tables", pro: false },
-      { name: "Clock In / Out", path: "/clockinpage", pro: false },
     ],
   },
   {
