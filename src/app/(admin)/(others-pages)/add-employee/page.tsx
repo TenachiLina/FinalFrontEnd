@@ -1,4 +1,4 @@
-import EmployeeDataForm from "@/components/form/addEmployeeForm/add";
+import EmployeeDataForm from "@/app/(admin)/(others-pages)/addEmployeeForm/page";
 
 export default function Page() {
   return <EmployeeDataForm />;

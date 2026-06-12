@@ -50,11 +50,15 @@ const navItems: NavItem[] = [
     name: "Clock In / Out",
     path: "/clockinpage",
   },
-
+{
+    icon: <UserCircleIcon />,
+    name: "Add Employee",
+    path: "/addEmployeeForm",
+},
   {
     name: "Forms",
     icon: <ListIcon />,
-    subItems: [{ name: "Form Elements", path: "/form-elements", pro: false }],
+    subItems: [{ name: "Form Elements", path: "/addEmployeeForm", pro: false }],
   },
   {
     name: "Employees Management",
@@ -63,6 +67,7 @@ const navItems: NavItem[] = [
       { name: "Basic Tables", path: "/basic-tables", pro: false },
     ],
   },
+  
   {
     name: "Pages",
     icon: <PageIcon />,
