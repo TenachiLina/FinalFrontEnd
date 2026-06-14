@@ -7,22 +7,32 @@ import {
   type WorktimeRecord,
   type WorktimePayload,
 } from "./worktime.api";
+import {
+  getEmployees,
+  getShifts,
+  getPlanningByDate,
+  type EmployeeRecord,
+  type ShiftRecord,
+  type PlanningRecord,
+} from "./shifts.api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ShiftStatus = "present" | "absent" | "pending";
 
-interface Shift {
-  shift_id: number;
-  start_time: string;
-  end_time: string;
+/** Internal employee shape used by the table */
+interface Employee {
+  num: number;          // empNumber (numeric)
+  mongoId: string;      // _id
+  empNumber: string;    // display string e.g. "EMP-101"
+  FirstName: string;
 }
 
-interface Employee {
-  num: number;
-  empNumber: string;
-  FirstName: string;
-  shift?: number;
+/** Internal shift shape used by the tabs */
+interface Shift {
+  shift_id: string;     // _id from DB
+  start_time: string;
+  end_time: string;
 }
 
 interface EmployeeTimeEntry {
@@ -32,8 +42,8 @@ interface EmployeeTimeEntry {
   absentComment: string;
   consomation: number | string;
   penalty: number | string;
-  workTimeId: string | null;   // Mongo _id once saved
-  _dirty?: boolean;            // true = needs sync
+  workTimeId: string | null;
+  _dirty?: boolean;
   _saving?: boolean;
 }
 
@@ -43,30 +53,13 @@ interface ManualInputState {
   value: string;
 }
 
-// ─── Mock data (replace with real props) ─────────────────────────────────────
-
-const MOCK_SHIFTS: Shift[] = [
-  { shift_id: 1, start_time: "08:00:00", end_time: "16:00:00" },
-  { shift_id: 2, start_time: "16:00:00", end_time: "00:00:00" },
-];
-const MOCK_EMPLOYEES: Employee[] = [
-  { num: 101, empNumber: "EMP-101", FirstName: "Lindsey Curtis", shift: 1 },
-  { num: 102, empNumber: "EMP-102", FirstName: "Kaiya George",   shift: 1 },
-  { num: 103, empNumber: "EMP-103", FirstName: "Zain Geidt",     shift: 2 },
-  { num: 104, empNumber: "EMP-104", FirstName: "Abram Schleifer",shift: 2 },
-  { num: 105, empNumber: "EMP-105", FirstName: "Carla George",   shift: 1 },
-];
-const MOCK_SELECTED_SHIFTS: Record<number, number[]> = {
-  101: [1], 102: [1], 103: [2], 104: [2], 105: [1],
-};
-
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
-const ClockInIcon  = () => (<svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>);
-const EditIcon     = () => (<svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>);
-const CloseIcon    = () => (<svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>);
-const TrashIcon    = () => (<svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>);
-const SaveIcon     = () => (<svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>);
+const ClockInIcon = () => (<svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>);
+const EditIcon    = () => (<svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>);
+const CloseIcon   = () => (<svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>);
+const TrashIcon   = () => (<svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>);
+const SaveIcon    = () => (<svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -75,37 +68,37 @@ const formatMin    = (n: number) => n <= 0 ? "00:00" : `${Math.floor(n/60).toStr
 const calcHours    = (i: string, o: string) => { if (i==="00:00"||o==="00:00") return "00:00"; let d=toMinutes(o)-toMinutes(i); if(d<0) d+=1440; return formatMin(d); };
 const calcLate     = (i: string, s: string) => { if (i==="00:00"||!s) return 0; const l=toMinutes(i)-toMinutes(s.slice(0,5)); return l>0?l:0; };
 const calcOvertime = (o: string, e: string) => { if(o==="00:00"||!e) return 0; let em=toMinutes(e.slice(0,5)),om=toMinutes(o); if(em===0)em=1440; if(em===1440&&om<720)om+=1440; const ot=om-em; return ot>0?ot:0; };
-const now          = () => { const d=new Date(); return `${d.getHours().toString().padStart(2,"0")}:${d.getMinutes().toString().padStart(2,"0")}`; };
+const nowTime      = () => { const d=new Date(); return `${d.getHours().toString().padStart(2,"0")}:${d.getMinutes().toString().padStart(2,"0")}`; };
 const getStatus    = (e: EmployeeTimeEntry): ShiftStatus => e.absent ? "absent" : e.clockIn!=="00:00" ? "present" : "pending";
 const badgeColor   = (s: ShiftStatus) => s==="present"?"success":s==="absent"?"error":"warning";
 const badgeLabel   = (s: ShiftStatus) => s==="present"?"Present":s==="absent"?"Absent":"Pending";
 
-/** Map a WorktimeRecord coming from the API into our local entry shape */
 function recordToEntry(r: WorktimeRecord): EmployeeTimeEntry {
   return {
-    clockIn:       r.clock_in        ?? "00:00",
-    clockOut:      r.clock_out       ?? "00:00",
-    absent:        r.absent          ?? false,
-    absentComment: r.absent_comment  ?? "",
-    consomation:   r.consomation     ?? 0,
-    penalty:       r.penalty         ?? 0,
+    clockIn:       r.clock_in       ?? "00:00",
+    clockOut:      r.clock_out      ?? "00:00",
+    absent:        r.absent         ?? false,
+    absentComment: r.absent_comment ?? "",
+    consomation:   r.consomation    ?? 0,
+    penalty:       r.penalty        ?? 0,
     workTimeId:    r._id,
   };
 }
 
-/** Map our local entry shape back to the API payload */
 function entryToPayload(
-  entry:  EmployeeTimeEntry,
+  entry: EmployeeTimeEntry,
   empNum: number,
-  shiftId: number,
-  date:   string
+  shiftId: string,
+  date: string,
+  shiftStart: string,
+  shiftEnd: string,
 ): WorktimePayload {
   const hours = calcHours(entry.clockIn, entry.clockOut);
-  const late  = calcLate(entry.clockIn, "");   // caller can pass shift start if needed
-  const ot    = calcOvertime(entry.clockOut, "");
+  const late  = calcLate(entry.clockIn, shiftStart);
+  const ot    = calcOvertime(entry.clockOut, shiftEnd);
   return {
     emp_id:           empNum,
-    shift_id:         shiftId,
+    shift_id:         shiftId as any,
     work_date:        date,
     clock_in:         entry.clockIn  !== "00:00" ? entry.clockIn  : undefined,
     clock_out:        entry.clockOut !== "00:00" ? entry.clockOut : undefined,
@@ -122,70 +115,96 @@ function entryToPayload(
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface AttendancePageProps {
-  employees?:           Employee[];
-  selectedShifts?:      Record<number, number[]>;
-  selectedShiftsForDate?: Shift[];
-  currentDate?:         string;
+  currentDate?: string;
 }
 
 export default function AttendancePage({
-  employees           = MOCK_EMPLOYEES,
-  selectedShifts      = MOCK_SELECTED_SHIFTS,
-  selectedShiftsForDate = MOCK_SHIFTS,
-  currentDate         = new Date().toISOString().slice(0, 10),
+  currentDate = new Date().toISOString().slice(0, 10),
 }: AttendancePageProps) {
 
-  const [shifts, setShifts]               = useState<Shift[]>(selectedShiftsForDate);
-  const [currentTab, setCurrentTab]       = useState<number | null>(selectedShiftsForDate[0]?.shift_id ?? null);
-  const [entries, setEntries]             = useState<Record<string, EmployeeTimeEntry>>({});
-  const [manualInput, setManualInput]     = useState<ManualInputState>({ employee: null, type: null, value: "" });
-  const [search, setSearch]               = useState("");
-  const [apiError, setApiError]           = useState<string | null>(null);
-  const [loadingData, setLoadingData]     = useState(false);
+  // ── DB-loaded state ───────────────────────────────────────────────────────
+  const [shifts, setShifts]         = useState<Shift[]>([]);
+  const [employees, setEmployees]   = useState<Employee[]>([]);
+  // Map: empNum -> shiftId[]  (built from planning)
+  const [assignedShifts, setAssignedShifts] = useState<Record<number, string[]>>({});
 
-  // Debounce timer refs keyed by entry key
+  const [currentTab, setCurrentTab] = useState<string | null>(null);
+  const [entries, setEntries]       = useState<Record<string, EmployeeTimeEntry>>({});
+  const [manualInput, setManualInput] = useState<ManualInputState>({ employee: null, type: null, value: "" });
+  const [search, setSearch]         = useState("");
+  const [apiError, setApiError]     = useState<string | null>(null);
+  const [loading, setLoading]       = useState(true);
+
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  // ── Load existing records from API on date/tab change ─────────────────────
+  // ── Load employees, shifts, planning for the selected date ───────────────
+  useEffect(() => {
+    setLoading(true);
+    setApiError(null);
+
+    Promise.all([
+      getEmployees(),
+      getShifts(),
+      getPlanningByDate(currentDate),
+    ])
+      .then(([empRecords, shiftRecords, planningRecords]) => {
+
+        // Map employees
+        const mappedEmployees: Employee[] = empRecords.map((e) => ({
+          num:       e.empNumber,
+          mongoId:   e._id,
+          empNumber: `EMP-${e.empNumber}`,
+          FirstName: `${e.firstName} ${e.lastName}`,
+        }));
+
+        // Map shifts (use _id as shift_id)
+        const mappedShifts: Shift[] = shiftRecords.map((s) => ({
+          shift_id:   s._id,
+          start_time: s.startTime.length === 5 ? `${s.startTime}:00` : s.startTime,
+          end_time:   s.endTime.length   === 5 ? `${s.endTime}:00`   : s.endTime,
+        }));
+
+        // Build assignedShifts from planning records
+        // planning.empId._id  →  find employee by mongoId  →  get empNumber
+        // planning.shiftId._id → shift_id
+        const assigned: Record<number, string[]> = {};
+        planningRecords.forEach((p) => {
+          const emp = empRecords.find((e) => e._id === p.empId._id);
+          if (!emp) return;
+          const empNum = emp.empNumber;
+          if (!assigned[empNum]) assigned[empNum] = [];
+          if (!assigned[empNum].includes(p.shiftId._id)) {
+            assigned[empNum].push(p.shiftId._id);
+          }
+        });
+
+        setEmployees(mappedEmployees);
+        setShifts(mappedShifts);
+        setAssignedShifts(assigned);
+        if (mappedShifts.length) setCurrentTab(mappedShifts[0].shift_id);
+      })
+      .catch((e) => setApiError(String(e)))
+      .finally(() => setLoading(false));
+  }, [currentDate]);
+
+  // ── Load existing worktime records for the date ───────────────────────────
   useEffect(() => {
     if (!currentDate) return;
-    setLoadingData(true);
-    setApiError(null);
     getWorktimesByDate(currentDate)
       .then((records) => {
         setEntries((prev) => {
           const next = { ...prev };
           records.forEach((r) => {
-            const key = `${r.emp_id}-${r.shift_id}`;
-            // Only overwrite if there's no unsaved local change pending
-            if (!next[key]?._dirty) {
-              next[key] = recordToEntry(r);
-            }
+            const k = `${r.emp_id}-${r.shift_id}`;
+            if (!next[k]?._dirty) next[k] = recordToEntry(r);
           });
           return next;
         });
       })
-      .catch((e) => setApiError(String(e)))
-      .finally(() => setLoadingData(false));
+      .catch((e) => setApiError(String(e)));
   }, [currentDate]);
 
-  useEffect(() => {
-    if (selectedShiftsForDate?.length) {
-      setShifts(selectedShiftsForDate);
-      if (!currentTab) setCurrentTab(selectedShiftsForDate[0].shift_id);
-    }
-  }, [selectedShiftsForDate]);
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  const key = (empNum: number, shiftId = currentTab) => `${empNum}-${shiftId}`;
-
-  const getEntry = (empNum: number): EmployeeTimeEntry =>
-    entries[key(empNum)] ?? {
-      clockIn: "00:00", clockOut: "00:00",
-      absent: false, absentComment: "",
-      consomation: 0, penalty: 0, workTimeId: null,
-    };
+  // ── Derived ───────────────────────────────────────────────────────────────
 
   const currentShift = useMemo(
     () => shifts.find((s) => s.shift_id === currentTab) ?? null,
@@ -196,35 +215,48 @@ export default function AttendancePage({
     if (!currentTab) return [];
     const q = search.toLowerCase();
     return employees.filter((emp) => {
-      const assigned = selectedShifts[emp.num];
-      const inShift  = Array.isArray(assigned)
-        ? assigned.map(String).includes(String(currentTab))
-        : String(assigned) === String(currentTab);
-      return inShift && (emp.FirstName.toLowerCase().includes(q) || emp.empNumber.toLowerCase().includes(q));
+      const inShift = (assignedShifts[emp.num] ?? []).includes(currentTab);
+      return inShift && (
+        emp.FirstName.toLowerCase().includes(q) ||
+        emp.empNumber.toLowerCase().includes(q)
+      );
     });
-  }, [currentTab, employees, selectedShifts, search]);
+  }, [currentTab, employees, assignedShifts, search]);
 
-  // ── Auto-save with debounce ────────────────────────────────────────────────
+  const entryKey = (empNum: number, shiftId = currentTab) => `${empNum}-${shiftId}`;
 
-  const scheduleSave = useCallback((empNum: number, shiftId: number, updatedEntry: EmployeeTimeEntry) => {
+  const getEntry = (empNum: number): EmployeeTimeEntry =>
+    entries[entryKey(empNum)] ?? {
+      clockIn: "00:00", clockOut: "00:00",
+      absent: false, absentComment: "",
+      consomation: 0, penalty: 0, workTimeId: null,
+    };
+
+  // ── Auto-save ─────────────────────────────────────────────────────────────
+
+  const scheduleSave = useCallback((empNum: number, shiftId: string, updatedEntry: EmployeeTimeEntry) => {
     const k = `${empNum}-${shiftId}`;
+    const shift = shifts.find((s) => s.shift_id === shiftId);
     clearTimeout(saveTimers.current[k]);
     saveTimers.current[k] = setTimeout(async () => {
       setEntries((prev) => ({ ...prev, [k]: { ...prev[k], _saving: true, _dirty: false } }));
       try {
-        const payload = entryToPayload(updatedEntry, empNum, shiftId, currentDate);
-        const saved   = await upsertWorktime(payload, updatedEntry.workTimeId ?? null);
+        const payload = entryToPayload(
+          updatedEntry, empNum, shiftId, currentDate,
+          shift?.start_time ?? "", shift?.end_time ?? ""
+        );
+        const saved = await upsertWorktime(payload, updatedEntry.workTimeId ?? null);
         setEntries((prev) => ({ ...prev, [k]: { ...prev[k], workTimeId: saved._id, _saving: false } }));
       } catch (e) {
         setApiError(`Save failed for employee ${empNum}: ${e}`);
         setEntries((prev) => ({ ...prev, [k]: { ...prev[k], _saving: false, _dirty: true } }));
       }
     }, 800);
-  }, [currentDate]);
+  }, [currentDate, shifts]);
 
   const updateEntry = useCallback((empNum: number, patch: Partial<EmployeeTimeEntry>) => {
     if (!currentTab) return;
-    const k  = key(empNum);
+    const k = entryKey(empNum);
     setEntries((prev) => {
       const updated = { ...(prev[k] ?? getEntry(empNum)), ...patch, _dirty: true };
       scheduleSave(empNum, currentTab, updated);
@@ -234,8 +266,8 @@ export default function AttendancePage({
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
-  const handleClockIn  = (empNum: number) => updateEntry(empNum, { clockIn:  now() });
-  const handleClockOut = (empNum: number) => updateEntry(empNum, { clockOut: now() });
+  const handleClockIn  = (empNum: number) => updateEntry(empNum, { clockIn:  nowTime() });
+  const handleClockOut = (empNum: number) => updateEntry(empNum, { clockOut: nowTime() });
 
   const openManualInput = (empNum: number, type: "clockIn" | "clockOut") =>
     setManualInput({ employee: empNum, type, value: getEntry(empNum)[type] });
@@ -249,10 +281,7 @@ export default function AttendancePage({
   };
 
   const toggleAbsent = (empNum: number, absent: boolean) =>
-    updateEntry(empNum, {
-      absent,
-      ...(absent ? { clockIn: "00:00", clockOut: "00:00" } : {}),
-    });
+    updateEntry(empNum, { absent, ...(absent ? { clockIn: "00:00", clockOut: "00:00" } : {}) });
 
   const clearAllData = () => {
     if (!window.confirm("Reset all clock-in/out data for today?")) return;
@@ -280,9 +309,15 @@ export default function AttendancePage({
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  if (!currentTab || !shifts.length) return (
+  if (loading) return (
+    <div className="flex items-center justify-center h-32 text-gray-400 text-sm animate-pulse">
+      Loading attendance data…
+    </div>
+  );
+
+  if (!shifts.length) return (
     <div className="flex items-center justify-center h-32 text-gray-400 text-sm">
-      Waiting for shift data…
+      No shifts found. Add shifts first.
     </div>
   );
 
@@ -363,21 +398,14 @@ export default function AttendancePage({
 
       {/* Table Card */}
       <div className="rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
-
         {/* Toolbar */}
         <div className="flex items-center justify-between px-5 py-4 gap-4 flex-wrap border-b border-gray-100 dark:border-white/[0.05]">
-          <div className="flex items-center gap-3">
-            <h2 className="text-base font-semibold text-gray-800 dark:text-white">
-              {currentShift ? `${currentShift.start_time.slice(0,5)} – ${currentShift.end_time.slice(0,5)} shift` : "Attendance"}
-            </h2>
-            {loadingData && (
-              <span className="text-xs text-gray-400 dark:text-gray-500 animate-pulse">Loading…</span>
-            )}
-          </div>
+          <h2 className="text-base font-semibold text-gray-800 dark:text-white">
+            {currentShift ? `${currentShift.start_time.slice(0,5)} – ${currentShift.end_time.slice(0,5)} shift` : "Attendance"}
+          </h2>
           <div className="relative">
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            <input
-              type="text" placeholder="Search employee…" value={search}
+            <input type="text" placeholder="Search employee…" value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9 pr-4 py-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-400 dark:border-white/[0.1] dark:bg-white/[0.05] dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-48"
             />
@@ -396,7 +424,11 @@ export default function AttendancePage({
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
               {filteredEmployees.length === 0 ? (
-                <tr><td colSpan={12} className="px-5 py-12 text-center text-sm text-gray-400">No employees in this shift.</td></tr>
+                <tr><td colSpan={12} className="px-5 py-12 text-center text-sm text-gray-400">
+                  {employees.length === 0
+                    ? "No employees found in the database."
+                    : "No employees assigned to this shift for today."}
+                </td></tr>
               ) : filteredEmployees.map((emp) => {
                 const entry   = getEntry(emp.num);
                 const status  = getStatus(entry);
@@ -408,30 +440,19 @@ export default function AttendancePage({
                   <tr key={`${emp.num}-${currentTab}`}
                     className={`transition-colors ${entry.absent ? "bg-red-50/40 dark:bg-red-900/10" : "hover:bg-gray-50 dark:hover:bg-white/[0.02]"}`}
                   >
-                    {/* Employee */}
                     <td className="px-4 py-3">
                       <p className="text-sm font-medium text-gray-800 dark:text-white/90">{emp.FirstName}</p>
                       <p className="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5">{emp.empNumber}</p>
                     </td>
-
-                    {/* Status */}
                     <td className="px-4 py-3">
                       <Badge size="sm" color={badgeColor(status)}>{badgeLabel(status)}</Badge>
                     </td>
-
-                    {/* Clock In */}
                     <td className="px-4 py-3">
                       {!entry.absent ? (
                         <div className="flex flex-col gap-1">
                           <button onClick={() => handleClockIn(emp.num)}
-                            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                              entry.clockIn !== "00:00"
-                                ? "bg-green-600 text-white hover:bg-green-700"
-                                : "border border-gray-200 dark:border-white/[0.1] text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.05]"
-                            }`}
-                          >
-                            <ClockInIcon />
-                            {entry.clockIn !== "00:00" ? entry.clockIn : "Clock In"}
+                            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${entry.clockIn !== "00:00" ? "bg-green-600 text-white hover:bg-green-700" : "border border-gray-200 dark:border-white/[0.1] text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.05]"}`}>
+                            <ClockInIcon />{entry.clockIn !== "00:00" ? entry.clockIn : "Clock In"}
                           </button>
                           <button onClick={() => openManualInput(emp.num, "clockIn")}
                             className="flex items-center gap-1 rounded px-2 py-1 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors">
@@ -440,20 +461,12 @@ export default function AttendancePage({
                         </div>
                       ) : <span className="text-xs text-gray-400 italic">—</span>}
                     </td>
-
-                    {/* Clock Out */}
                     <td className="px-4 py-3">
                       {!entry.absent ? (
                         <div className="flex flex-col gap-1">
                           <button onClick={() => handleClockOut(emp.num)}
-                            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                              entry.clockOut !== "00:00"
-                                ? "bg-red-500 text-white hover:bg-red-600"
-                                : "border border-gray-200 dark:border-white/[0.1] text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.05]"
-                            }`}
-                          >
-                            <ClockInIcon />
-                            {entry.clockOut !== "00:00" ? entry.clockOut : "Clock Out"}
+                            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${entry.clockOut !== "00:00" ? "bg-red-500 text-white hover:bg-red-600" : "border border-gray-200 dark:border-white/[0.1] text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.05]"}`}>
+                            <ClockInIcon />{entry.clockOut !== "00:00" ? entry.clockOut : "Clock Out"}
                           </button>
                           <button onClick={() => openManualInput(emp.num, "clockOut")}
                             className="flex items-center gap-1 rounded px-2 py-1 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors">
@@ -462,45 +475,27 @@ export default function AttendancePage({
                         </div>
                       ) : <span className="text-xs text-gray-400 italic">—</span>}
                     </td>
-
-                    {/* Hours */}
                     <td className="px-4 py-3"><span className="text-sm font-mono text-gray-700 dark:text-gray-300">{hours}</span></td>
-
-                    {/* Delay */}
-                    <td className="px-4 py-3">
-                      <span className={`text-sm font-mono ${lateMin > 0 ? "text-amber-600 dark:text-amber-400" : "text-gray-400"}`}>{formatMin(lateMin)}</span>
-                    </td>
-
-                    {/* Overtime */}
-                    <td className="px-4 py-3">
-                      <span className={`text-sm font-mono ${otMin > 0 ? "text-blue-600 dark:text-blue-400" : "text-gray-400"}`}>{formatMin(otMin)}</span>
-                    </td>
-
-                    {/* Consumption */}
+                    <td className="px-4 py-3"><span className={`text-sm font-mono ${lateMin > 0 ? "text-amber-600 dark:text-amber-400" : "text-gray-400"}`}>{formatMin(lateMin)}</span></td>
+                    <td className="px-4 py-3"><span className={`text-sm font-mono ${otMin > 0 ? "text-blue-600 dark:text-blue-400" : "text-gray-400"}`}>{formatMin(otMin)}</span></td>
                     <td className="px-4 py-3">
                       <input type="number" value={entry.consomation || ""} placeholder="0"
                         onChange={(e) => updateEntry(emp.num, { consomation: e.target.value })}
                         className="w-16 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-800 dark:border-white/[0.1] dark:bg-white/[0.05] dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                       />
                     </td>
-
-                    {/* Penalty */}
                     <td className="px-4 py-3">
                       <input type="number" value={entry.penalty || ""} placeholder="0"
                         onChange={(e) => updateEntry(emp.num, { penalty: e.target.value })}
                         className="w-16 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-800 dark:border-white/[0.1] dark:bg-white/[0.05] dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                       />
                     </td>
-
-                    {/* Absent toggle */}
                     <td className="px-4 py-3">
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" className="sr-only peer" checked={entry.absent} onChange={(e) => toggleAbsent(emp.num, e.target.checked)} />
                         <div className="w-9 h-5 bg-gray-200 dark:bg-white/[0.1] peer-focus:ring-2 peer-focus:ring-blue-500/20 rounded-full peer peer-checked:bg-red-500 transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4" />
                       </label>
                     </td>
-
-                    {/* Reason */}
                     <td className="px-4 py-3">
                       <input type="text" disabled={!entry.absent} placeholder={entry.absent ? "Enter reason…" : "—"}
                         value={entry.absentComment || ""}
@@ -508,15 +503,13 @@ export default function AttendancePage({
                         className="w-32 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-800 placeholder-gray-300 dark:border-white/[0.1] dark:bg-white/[0.05] dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
                       />
                     </td>
-
-                    {/* Save indicator */}
                     <td className="px-4 py-3">
                       {entry._saving ? (
-                        <span className="text-xs text-blue-500 dark:text-blue-400 animate-pulse flex items-center gap-1"><SaveIcon />Saving…</span>
+                        <span className="text-xs text-blue-500 animate-pulse flex items-center gap-1"><SaveIcon />Saving…</span>
                       ) : entry._dirty ? (
-                        <span className="text-xs text-amber-500 dark:text-amber-400">Unsaved</span>
+                        <span className="text-xs text-amber-500">Unsaved</span>
                       ) : entry.workTimeId ? (
-                        <span className="text-xs text-green-600 dark:text-green-400">✓ Saved</span>
+                        <span className="text-xs text-green-600">✓ Saved</span>
                       ) : (
                         <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
                       )}
@@ -528,7 +521,6 @@ export default function AttendancePage({
           </table>
         </div>
 
-        {/* Footer */}
         <div className="px-5 py-3 border-t border-gray-100 dark:border-white/[0.05] text-xs text-gray-400 dark:text-gray-500">
           {filteredEmployees.length} employee{filteredEmployees.length !== 1 ? "s" : ""} in this shift
         </div>
