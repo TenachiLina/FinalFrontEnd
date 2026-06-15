@@ -1,7 +1,9 @@
-export interface Cell {
-  id: string;
-  title: string;
-}
+// types.ts
+export type Cell = {
+  id: string;          // local UUID (for React key / delete)
+  employeeId: string;  // ← real DB id
+  title: string;       // display name
+};
 
 export type GridData = Record<number, Record<string, Cell[]>>;
 
@@ -23,5 +25,4 @@ export const POSTS = [
 export const SHIFTS = [
   { id: "shift-1", label: "6:00 AM - 16:00 PM", sub: "Morning-Afternoon" },
   { id: "shift-2", label: "16:00 PM - 00:00 AM", sub: "Evening" },
-  { id: "shift-3", label: "16:00 PM - 00:00 AM", sub: "Evening" },
 ];

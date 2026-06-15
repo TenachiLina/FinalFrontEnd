@@ -1,30 +1,27 @@
 "use client";
 import React from "react";
 import { Modal } from "@/components/ui/modal";
-import Button from "@/components/ui/button/Button";
-import { BookmarkIcon, ArrowDownTrayIcon, ArrowTopRightOnSquareIcon, ArchiveBoxArrowDownIcon } from "@heroicons/react/24/outline";
-import { useShiftGrid } from "@/hooks/useShiftGrid";
+import { useViewPlanning } from "@/hooks/useViewPlanning";
 import { POSTS, SHIFTS } from "@/components/calendar/types";
+import Button from "../ui/button/Button";
+import { ArrowDownTrayIcon, ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
 
 
-const ShiftGrid: React.FC = () => {
+const ViewCalender: React.FC = () => {
   const {
     grid,
     currentDate, setCurrentDate,
     calendarMonth, setCalendarMonth,
     goToToday, goPrev, goNext, formattedDate,
-    isOpen, activeCell, cellTitle, setCellTitle,
-    handleCellClick, handleSave, handleClose,
-    isEditModalOpen, editingEmployee, editTitle, setEditTitle,
-    openEditModal, handleEdit, handleCloseEditModal,
+    activeEmployee, isDetailsModalOpen,
+    handleCloseDetailsModal,
     isListModalOpen, setIsListModalOpen,
     listCell, setListCell, listEmployees,
-    handleDelete, handleSavePlanning,
-    handleImportFile, handleImportClick, fileInputRef,
-    selectedEmployee, setSelectedEmployee,
-  } = useShiftGrid();
+    handleListCellClick,
+    loading, error,
+    handleExport,
+  } = useViewPlanning();
 
-  const activePost = activeCell ? POSTS.find((p) => p.id === activeCell.postId) : null;
 
   // calendar helper
   const getCalendarDays = (date: Date) => {
@@ -145,39 +142,9 @@ const ShiftGrid: React.FC = () => {
               </button>
             </div>
 
-            <span className="text-sm font-medium text-gray-800 dark:text-white mr-12">
+            <span className="text-sm font-medium text-gray-800 dark:text-white">
               {formattedDate}
             </span>
-
-            <div className="flex items-center gap-3">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xls"
-                hidden
-                onChange={handleImportFile}
-              />
-
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={handleImportClick}
-              >
-                <ArrowDownTrayIcon
-                  className="w-4 h-4 text-gray-100"
-                  strokeWidth={3}
-                />
-                Import Planning
-              </Button>
-
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => handleSavePlanning()}  // ✅ pass the selected date
-              >
-                Save Planning
-              </Button>
-            </div>
           </div>
 
           <table className="w-full border-collapse">
@@ -215,53 +182,45 @@ const ShiftGrid: React.FC = () => {
 
                   {/* Cells */}
                   {SHIFTS.map((shift) => {
-                    const events = grid[post.id][shift.id];
+                    const employees = grid[post.id][shift.id];
                     return (
                       <td
                         key={shift.id}
-                        onClick={() => handleCellClick(post.id, shift.id)}
                         className={[
-                          "border-b border-r border-gray-200 dark:border-gray-700 p-2 cursor-pointer",
+                          "border-b border-r border-gray-200 dark:border-gray-700 p-2",
                           "transition-colors duration-150",
                           "last:border-r-0",
                           rowIdx === POSTS.length - 1 ? "border-b-0" : "",
-                          "hover:bg-brand-50 dark:hover:bg-brand-900/10",
                         ].join(" ")}
                         style={{ minWidth: "160px", height: "64px" }}
                       >
-                        {events.length > 0 ? (
+                        {employees.length > 0 ? (
                           <div className="flex flex-col gap-[2px] overflow-hidden">
-                            {events.slice(0, 2).map((emp) => (
+                            {employees.slice(0, 2).map((emp) => (
                               <div
                                 key={emp.id}
-                                className="text-[11px] px-2 py-[2px] text-gray-800 dark:text-white truncate"
+                                className="text-[11px] px-2 py-[2px] text-gray-800 dark:text-white truncate cursor-pointer hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
                                 title={emp.title}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setListCell({ postId: post.id, shiftId: shift.id });
-                                  setIsListModalOpen(true);
-                                }}
                               >
                                 {emp.title}
                               </div>
                             ))}
 
-                            {events.length > 2 && (
+                            {employees.length > 2 && (
                               <div
                                 className="text-[10px] text-gray-400 px-2 cursor-pointer hover:text-gray-600"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setListCell({ postId: post.id, shiftId: shift.id });
-                                  setIsListModalOpen(true);
+                                  handleListCellClick(post.id, shift.id);
                                 }}
                               >
-                                +{events.length - 2}
+                                +{employees.length - 2}
                               </div>
                             )}
                           </div>
                         ) : (
-                          <div className="flex items-center justify-center h-full opacity-0 hover:opacity-100 transition-opacity">
-                            <span className="text-xs text-gray-400 dark:text-gray-600">+ Add</span>
+                          <div className="flex items-center justify-center h-full">
+                            <span className="text-xs text-gray-400 dark:text-gray-600">-</span>
                           </div>
                         )}
                       </td>
@@ -274,84 +233,44 @@ const ShiftGrid: React.FC = () => {
         </div>
 
         {/* ── Modals ────────────────────────────────────────────────────────── */}
-        <Modal isOpen={isOpen} onClose={handleClose} className="max-w-[500px] p-6 lg:p-10">
+
+        {/* Employee Details Modal */}
+        <Modal isOpen={isDetailsModalOpen} onClose={handleCloseDetailsModal} className="max-w-[400px] p-6">
           <div className="flex flex-col gap-6">
-            {/* Header */}
             <div>
-              <h5 className="mb-1 font-semibold text-gray-800 text-theme-xl dark:text-white/90 lg:text-2xl">
-                Add Assignment 
+              <h5 className="mb-1 font-semibold text-gray-800 text-lg dark:text-white/90">
+                Employee Details
               </h5>
-              {activeCell && activePost && (
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {activePost.label}{":   "}
-                  {"  "}{SHIFTS.find((s) => s.id === activeCell.shiftId)?.label}{" "}
-
-                </p>
-              )}
             </div>
 
-            {/* Title input */}
-            {/* <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                Employee's Name
-              </label>
-              <input
-                autoFocus
-                type="text"
-                value={cellTitle}
-                onChange={(e) => setCellTitle(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSave()}
-                placeholder="ex: John Doe"
-                className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800" />
-            </div> */}
-            {/* Title input */}
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                Employee's Name
+              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">
+                Name
               </label>
-              <input
-                autoFocus
-                type="text"
-                value={selectedEmployee?.name ?? ""}
-                onChange={(e) =>
-                  setSelectedEmployee(
-                    e.target.value.trim()
-                      ? { id: "TEMP", name: e.target.value }  // static placeholder id
-                      : null
-                  )
-                }
-                onKeyDown={(e) => e.key === "Enter" && handleSave()}
-                placeholder="ex: John Doe"
-                className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-              />
+              <div className="px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-white">
+                {activeEmployee?.title}
+              </div>
             </div>
 
-            {/* Actions */}
             <div className="flex items-center gap-3 sm:justify-end">
               <button
-                onClick={handleClose}
-                type="button"
-                className="flex w-full justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] sm:w-auto"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
+                onClick={handleCloseDetailsModal}
                 type="button"
                 className="flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 sm:w-auto"
               >
-                Add
+                Close
               </button>
             </div>
           </div>
         </Modal>
 
+        {/* Employees in Shift Modal */}
         <Modal
         isOpen={isListModalOpen}
         onClose={() => setIsListModalOpen(false)}
         className="max-w-[400px] p-6 relative"
         >
-          <div className="flex flex-col gap-4">   
+          <div className="flex flex-col gap-4">
             {/* Header */}
             <div>
               <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
@@ -368,29 +287,9 @@ const ShiftGrid: React.FC = () => {
               {listEmployees.map((emp) => (
                 <div
                   key={emp.id}
-                  className="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm text-gray-700 dark:text-white flex items-center justify-between"
+                  className="px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm text-gray-700 dark:text-white cursor-pointer hover:bg-brand-100 dark:hover:bg-brand-900/30 transition-colors"
                 >
-                  <span className="truncate">{emp.title}</span>
-                  <div className="flex items-center gap-2 ml-2 shrink-0">
-                    <button
-                      onClick={() => openEditModal(emp, listCell!)}
-                      type="button"
-                      className="text-blue-400 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 text-xs font-medium"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (!listCell) return;
-                        handleDelete(emp.id, listCell);
-                        if (listEmployees.length <= 1) setIsListModalOpen(false);
-                      }}
-                      type="button"
-                      className="text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-400 text-xs font-medium"
-                    >
-                      Remove
-                    </button>
-                  </div>
+                  {emp.title}
                 </div>
               ))}
 
@@ -407,71 +306,29 @@ const ShiftGrid: React.FC = () => {
                 type="button"
                 className="flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 sm:w-auto"
             >
-              Hide details
+              Close
             </button>
-          </div>
-        </Modal>
-
-        <Modal
-        isOpen={isEditModalOpen}
-        onClose={handleCloseEditModal}
-        className="max-w-[500px] p-6 lg:p-10"
-        >
-          <div className="flex flex-col gap-6">
-            {/* Header */}
-            <div>
-              <h5 className="mb-1 font-semibold text-gray-800 text-theme-xl dark:text-white/90 lg:text-2xl">
-                Assignment 
-              </h5>
-              {activeCell && activePost && (
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {activePost.label}{":   "}
-                  {SHIFTS.find((s) => s.id === activeCell.shiftId)?.label}
-                </p>
-              )}
-            </div>
-
-            {/* Input */}
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                Title
-              </label>
-              <input
-                autoFocus
-                type="text"
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleEdit()}
-                placeholder="ex: John Doe"
-                className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-              />
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-3 sm:justify-end">
-              <button
-                onClick={handleCloseEditModal}
-                type="button"
-                className="flex w-full justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] sm:w-auto"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleEdit}
-                type="button"
-                className="flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 sm:w-auto"
-              >
-                Update
-              </button>
-            </div>
           </div>
         </Modal>
       </div>
     </div>
+    <div className="flex items-center gap-5">
+            <Button size="md" variant="primary">
+              <ArrowDownTrayIcon 
+                className="w-4 h-4 text-gray-100"
+                  strokeWidth={3}
+                />
+                Import Planning
+            </Button>
+      <Button size="md" variant="primary" onClick={handleExport}>
+        <ArrowTopRightOnSquareIcon className="w-4 h-4 text-gray-100" strokeWidth={3} />
+        Export Planning
+      </Button>
+    </div>
+    {loading && <div className="text-center text-gray-500 mt-4">Loading planning data...</div>}
+    {error && <div className="text-center text-red-500 mt-4">Error: {error}</div>}
     </>
   );
 };
 
-export default ShiftGrid;
-
-
+export default ViewCalender;

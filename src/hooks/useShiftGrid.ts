@@ -1,6 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useModal } from "@/hooks/useModal";
 import { Cell, GridData, POSTS, SHIFTS } from "../components/calendar/types";
+import * as XLSX from "xlsx";
 
 export const useShiftGrid = () => {
   // ── Modal (add) ──────────────────────────────────────────────────
@@ -49,9 +50,35 @@ export const useShiftGrid = () => {
     openModal();
   }, [openModal]);
 
+  // const handleSave = useCallback(() => {
+  //   if (!activeCell || !cellTitle.trim()) return;
+  //   const { postId, shiftId } = activeCell;
+
+  //   setGrid((prev) => ({
+  //     ...prev,
+  //     [postId]: {
+  //       ...prev[postId],
+  //       [shiftId]: [
+  //         ...prev[postId][shiftId],
+  //         { id: crypto.randomUUID(), title: cellTitle.trim() },
+  //       ],
+  //     },
+  //   }));
+
+  //   closeModal();
+  //   setActiveCell(null);
+  //   setCellTitle("");
+  // }, [activeCell, cellTitle, closeModal]);
+
+
+  // In your hook, add state for the selected employee
+  const [selectedEmployee, setSelectedEmployee] = useState<{ id: string; name: string } | null>(null);
+
   const handleSave = useCallback(() => {
-    if (!activeCell || !cellTitle.trim()) return;
+    if (!activeCell || !selectedEmployee) return;
+    console.log("💾 Saving employee: ", selectedEmployee);
     const { postId, shiftId } = activeCell;
+    console.log("🤸‍♂️ Active cell: ", postId, shiftId);
 
     setGrid((prev) => ({
       ...prev,
@@ -59,15 +86,20 @@ export const useShiftGrid = () => {
         ...prev[postId],
         [shiftId]: [
           ...prev[postId][shiftId],
-          { id: crypto.randomUUID(), title: cellTitle.trim() },
+          {
+            id: crypto.randomUUID(),          // local key only
+            employeeId: selectedEmployee.id,  // ← real DB id
+            title: selectedEmployee.name,     // display name
+          },
         ],
       },
     }));
 
     closeModal();
     setActiveCell(null);
-    setCellTitle("");
-  }, [activeCell, cellTitle, closeModal]);
+    setSelectedEmployee(null);
+  }, [activeCell, selectedEmployee, closeModal]);
+
 
   const handleClose = useCallback(() => {
     closeModal();
@@ -129,7 +161,11 @@ export const useShiftGrid = () => {
     setActiveCell(null);
   }, [activeCell, closeModal]);
 
-  const handleSavePlanning = useCallback(async () => {
+
+ const handleSavePlanning = useCallback(async () => {
+ const pad = (n: number) => String(n).padStart(2, "0");
+ const formattedDate = `${currentDate.getFullYear()}-${pad(currentDate.getMonth() + 1)}-${pad(currentDate.getDate())}`;
+ console.log("🌤️ selected day: ", currentDate.toISOString());
     const entries: {
       shiftId: string;
       empId: string;
@@ -142,9 +178,9 @@ export const useShiftGrid = () => {
         grid[post.id][shift.id].forEach((cell) => {
           entries.push({
             shiftId: shift.id,
-            empId: cell.id,
+            empId: cell.employeeId,  
             taskId: post.id,
-            planDate: currentDate.toISOString(),
+            planDate: formattedDate,
           });
         });
       });
@@ -156,7 +192,7 @@ export const useShiftGrid = () => {
     }
 
     try {
-      const res = await fetch("http://localhost:3000/planning/save", {
+      const res = await fetch("http://localhost:3001/planning/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ entries }),
@@ -168,6 +204,69 @@ export const useShiftGrid = () => {
       alert("Error saving planning.");
     }
   }, [grid, currentDate]);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImportFile = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const data = await file.arrayBuffer();
+
+      const workbook = XLSX.read(data, {
+        type: "array",
+      });
+
+      const sheetName = workbook.SheetNames[0];
+
+      const worksheet = workbook.Sheets[sheetName];
+
+      const rows = XLSX.utils.sheet_to_json<Record<string, string>>(worksheet);
+
+      const importedGrid: any = {};
+
+      POSTS.forEach((post) => {
+        importedGrid[post.id] = {};
+
+        SHIFTS.forEach((shift) => {
+          importedGrid[post.id][shift.id] = [];
+        });
+      });
+
+      rows.forEach((row) => {
+        const taskName = row.Task;
+
+        const post = POSTS.find((p) => p.label === taskName);
+
+        if (!post) return;
+
+        SHIFTS.forEach((shift) => {
+          const cellValue = row[shift.label];
+
+          if (!cellValue) return;
+
+          const employees = String(cellValue)
+            .split("\n")
+            .filter(Boolean)
+            .map((name, index) => ({
+              id: `${post.id}-${shift.id}-${index}-${Date.now()}`,
+              title: name.trim(),
+            }));
+
+          importedGrid[post.id][shift.id] = employees;
+        });
+      });
+
+      setGrid(importedGrid);
+
+      e.target.value = "";
+  };
+
 
   return {
     // grid
@@ -187,5 +286,8 @@ export const useShiftGrid = () => {
     listCell, setListCell, listEmployees,
     // delete & save planning
     handleDelete, handleSavePlanning,
+    //Import
+    handleImportFile, handleImportClick, fileInputRef,
+    selectedEmployee, setSelectedEmployee,
   };
 };
